@@ -9,49 +9,85 @@
         android:id="@+id/tvLabel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Original"
+        android:text="NeuralLense - Take a photo to start"
         android:textSize="18sp"
         android:textStyle="bold"
         android:gravity="center"
-        android:layout_marginBottom="8dp" />
+        android:padding="8dp"/>
 
     <ImageView
         android:id="@+id/imageView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:scaleType="fitCenter"
-        android:background="#f0f0f0" />
+        android:scaleType="centerInside"
+        android:background="#EEEEEE"/>
 
-    <LinearLayout
+    <RadioGroup
+        android:id="@+id/rgMode"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="16dp">
+        android:padding="8dp">
 
-        <Button
-            android:id="@+id/btnCamera"
+        <RadioButton
+            android:id="@+id/rbBoth"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Take Photo"
-            android:layout_marginEnd="4dp" />
+            android:text="Both"
+            android:checked="true"/>
 
-        <Button
-            android:id="@+id/btnEnhance"
+        <RadioButton
+            android:id="@+id/rbLowLight"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Enhance"
-            android:enabled="false"
-            android:layout_marginEnd="4dp" />
+            android:text="Brighten"/>
 
-        <Button
-            android:id="@+id/btnCompare"
+        <RadioButton
+            android:id="@+id/rbSharpen"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Compare"
-            android:enabled="false" />
-    </LinearLayout>
+            android:text="Sharpen"/>
+
+        <RadioButton
+            android:id="@+id/rbDeblur"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Deblur"/>
+    </RadioGroup>
+
+    <Button
+        android:id="@+id/btnCamera"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Take Photo"
+        android:textSize="16sp"/>
+
+    <Button
+        android:id="@+id/btnGallery"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Load from Gallery"
+        android:textSize="16sp"/>
+
+    <Button
+        android:id="@+id/btnEnhance"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Enhance Image"
+        android:textSize="16sp"
+        android:enabled="false"/>
+
+    <Button
+        android:id="@+id/btnCompare"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Compare Original/Enhanced"
+        android:textSize="16sp"
+        android:enabled="false"/>
+
 </LinearLayout>
