@@ -3,91 +3,144 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:background="#1A1A2E"
     android:padding="16dp">
 
+    <!-- Header -->
     <TextView
-        android:id="@+id/tvLabel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="NeuralLense - Take a photo to start"
-        android:textSize="18sp"
+        android:text="🔮 NeuralLens"
+        android:textSize="24sp"
         android:textStyle="bold"
+        android:textColor="#FFFFFF"
         android:gravity="center"
-        android:padding="8dp"/>
+        android:paddingTop="8dp"
+        android:paddingBottom="4dp"/>
 
-    <ImageView
-        android:id="@+id/imageView"
+    <TextView
+        android:id="@+id/tvInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="AI-powered image restoration"
+        android:textSize="14sp"
+        android:textColor="#888888"
+        android:gravity="center"
+        android:paddingBottom="12dp"/>
+
+    <!-- Image Display -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:scaleType="centerInside"
-        android:background="#EEEEEE"/>
+        android:background="#0F0F1A"
+        android:layout_marginBottom="12dp">
 
-    <RadioGroup
-        android:id="@+id/rgMode"
+        <ImageView
+            android:id="@+id/imageView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerInside"
+            android:src="@android:drawable/ic_menu_gallery"/>
+
+        <TextView
+            android:id="@+id/tvLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_margin="8dp"
+            android:background="#80000000"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="4dp"
+            android:text="Select an image"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"/>
+
+    </FrameLayout>
+
+    <!-- Progress Section -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="8dp"
+        android:paddingBottom="8dp">
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="#6C63FF"
+            android:progressBackgroundTint="#333333"
+            android:visibility="gone"/>
+
+        <TextView
+            android:id="@+id/tvProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="13sp"
+            android:textColor="#AAAAAA"
+            android:gravity="center"
+            android:paddingTop="6dp"
+            android:visibility="gone"/>
+
+    </LinearLayout>
+
+    <!-- Buttons -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="8dp">
+        android:layout_marginBottom="8dp">
 
-        <RadioButton
-            android:id="@+id/rbBoth"
+        <Button
+            android:id="@+id/btnCamera"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_weight="1"
-            android:text="Both"
-            android:checked="true"/>
+            android:layout_marginEnd="4dp"
+            android:text="📷 Camera"
+            android:textSize="14sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#2D2D44"/>
 
-        <RadioButton
-            android:id="@+id/rbLowLight"
+        <Button
+            android:id="@+id/btnGallery"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_weight="1"
-            android:text="Brighten"/>
+            android:layout_marginStart="4dp"
+            android:text="🖼️ Gallery"
+            android:textSize="14sp"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#2D2D44"/>
 
-        <RadioButton
-            android:id="@+id/rbSharpen"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Sharpen"/>
-
-        <RadioButton
-            android:id="@+id/rbDeblur"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Deblur"/>
-    </RadioGroup>
-
-    <Button
-        android:id="@+id/btnCamera"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Take Photo"
-        android:textSize="16sp"/>
-
-    <Button
-        android:id="@+id/btnGallery"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Load from Gallery"
-        android:textSize="16sp"/>
+    </LinearLayout>
 
     <Button
         android:id="@+id/btnEnhance"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Enhance Image"
+        android:layout_height="56dp"
+        android:layout_marginBottom="8dp"
+        android:text="✨ Enhance with AI"
         android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#6C63FF"
         android:enabled="false"/>
 
     <Button
         android:id="@+id/btnCompare"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Compare Original/Enhanced"
-        android:textSize="16sp"
+        android:layout_height="48dp"
+        android:text="🔄 Compare"
+        android:textSize="14sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#2D2D44"
         android:enabled="false"/>
 
 </LinearLayout>

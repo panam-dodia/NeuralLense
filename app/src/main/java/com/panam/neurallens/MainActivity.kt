@@ -5,10 +5,10 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.ImageView
-import android.widget.RadioButton
-import android.widget.RadioGroup
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,25 +22,34 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var imageEnhancer: ImageEnhancer
+
+    private lateinit var replicateClient: ReplicateClient
+
+    // Views
     private lateinit var imageView: ImageView
     private lateinit var tvLabel: TextView
+    private lateinit var tvProgress: TextView
+    private lateinit var tvInfo: TextView
+    private lateinit var progressBar: ProgressBar
     private lateinit var btnCamera: Button
     private lateinit var btnGallery: Button
     private lateinit var btnEnhance: Button
     private lateinit var btnCompare: Button
-    private lateinit var rgMode: RadioGroup
+
+    // State
     private var originalBitmap: Bitmap? = null
     private var enhancedBitmap: Bitmap? = null
     private var showingOriginal = true
     private lateinit var photoFile: File
 
     companion object {
+        private const val TAG = "MainActivity"
         private const val MAX_IMAGE_DIMENSION = 1920
     }
 
     private val takePicture = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
+            originalBitmap?.recycle()
             originalBitmap = decodeSampledBitmapFromFile(photoFile.absolutePath)
             imageView.setImageBitmap(originalBitmap)
             btnEnhance.isEnabled = true
@@ -60,16 +69,14 @@ class MainActivity : AppCompatActivity() {
                 inputStream?.close()
 
                 if (loadedBitmap != null) {
-                    // Resize if too large
                     originalBitmap?.recycle()
                     originalBitmap = resizeBitmapIfNeeded(loadedBitmap)
-
                     imageView.setImageBitmap(originalBitmap)
                     btnEnhance.isEnabled = true
                     btnCompare.isEnabled = false
                     enhancedBitmap?.recycle()
                     enhancedBitmap = null
-                    tvLabel.text = "Original (from Gallery)"
+                    tvLabel.text = "Original"
                     showingOriginal = true
                 } else {
                     Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
@@ -93,17 +100,27 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        imageEnhancer = ImageEnhancer(this)
+        // Initialize Replicate client using BuildConfig
+        replicateClient = ReplicateClient(BuildConfig.REPLICATE_API_TOKEN)
+
+        // Find views
         imageView = findViewById(R.id.imageView)
         tvLabel = findViewById(R.id.tvLabel)
+        tvProgress = findViewById(R.id.tvProgress)
+        tvInfo = findViewById(R.id.tvInfo)
+        progressBar = findViewById(R.id.progressBar)
         btnCamera = findViewById(R.id.btnCamera)
         btnGallery = findViewById(R.id.btnGallery)
         btnEnhance = findViewById(R.id.btnEnhance)
         btnCompare = findViewById(R.id.btnCompare)
-        rgMode = findViewById(R.id.rgMode)
 
         photoFile = File(cacheDir, "photo.jpg")
 
+        // Hide progress initially
+        progressBar.visibility = View.GONE
+        tvProgress.visibility = View.GONE
+
+        // Button listeners
         btnCamera.setOnClickListener {
             checkCameraPermission()
         }
@@ -175,49 +192,95 @@ class MainActivity : AppCompatActivity() {
         takePicture.launch(uri)
     }
 
+    /**
+     * Enhance image using DACLIP via Replicate cloud
+     */
     private fun enhanceImage() {
         val bitmap = originalBitmap ?: return
 
-        val mode = when(rgMode.checkedRadioButtonId) {
-            R.id.rbLowLight -> EnhancementMode.LOW_LIGHT
-            R.id.rbSharpen -> EnhancementMode.SHARPEN
-            R.id.rbDeblur -> EnhancementMode.DEBLUR
-            R.id.rbBoth -> EnhancementMode.BOTH
-            else -> EnhancementMode.BOTH
-        }
-
-        Toast.makeText(this, "Processing with ${mode.name}...", Toast.LENGTH_SHORT).show()
-        btnEnhance.isEnabled = false
+        setProcessingState(true, "Connecting to AI server...")
 
         lifecycleScope.launch {
-            val enhanced = withContext(Dispatchers.Default) {
-                imageEnhancer.enhance(bitmap, mode)
+            try {
+                val enhanced = withContext(Dispatchers.IO) {
+                    replicateClient.restoreImage(
+                        bitmap = bitmap,
+                        maxSize = 512,
+                        onProgress = { progress, status ->
+                            runOnUiThread {
+                                progressBar.progress = (progress * 100).toInt()
+                                tvProgress.text = status
+                            }
+                        }
+                    )
+                }
+
+                enhancedBitmap?.recycle()
+                enhancedBitmap = enhanced
+                imageView.setImageBitmap(enhanced)
+                tvLabel.text = "✨ Enhanced"
+                showingOriginal = false
+
+                setProcessingState(false)
+                btnCompare.isEnabled = true
+
+                Toast.makeText(this@MainActivity, "Enhancement complete!", Toast.LENGTH_SHORT).show()
+
+            } catch (e: ReplicateException) {
+                setProcessingState(false)
+                Toast.makeText(
+                    this@MainActivity,
+                    "Error: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+
+            } catch (e: Exception) {
+                setProcessingState(false)
+                Toast.makeText(
+                    this@MainActivity,
+                    "Network error. Please check your connection.",
+                    Toast.LENGTH_LONG
+                ).show()
+                e.printStackTrace()
             }
-            enhancedBitmap?.recycle()
-            enhancedBitmap = enhanced
-            imageView.setImageBitmap(enhanced)
-            tvLabel.text = "Enhanced (${mode.name})"
-            showingOriginal = false
-            btnEnhance.isEnabled = true
-            btnCompare.isEnabled = true
-            Toast.makeText(this@MainActivity, "Done! Click Compare to toggle", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setProcessingState(isProcessing: Boolean, message: String = "") {
+        runOnUiThread {
+            btnEnhance.isEnabled = !isProcessing
+            btnCamera.isEnabled = !isProcessing
+            btnGallery.isEnabled = !isProcessing
+
+            if (isProcessing) {
+                progressBar.visibility = View.VISIBLE
+                tvProgress.visibility = View.VISIBLE
+                progressBar.progress = 0
+                tvProgress.text = message
+                btnEnhance.text = "Processing..."
+            } else {
+                progressBar.visibility = View.GONE
+                tvProgress.visibility = View.GONE
+                btnEnhance.text = "✨ Enhance with AI"
+            }
         }
     }
 
     private fun toggleComparison() {
         if (showingOriginal) {
             imageView.setImageBitmap(enhancedBitmap)
-            tvLabel.text = "Enhanced"
+            tvLabel.text = "✨ Enhanced"
+            btnCompare.text = "Show Original"
         } else {
             imageView.setImageBitmap(originalBitmap)
             tvLabel.text = "Original"
+            btnCompare.text = "Show Enhanced"
         }
         showingOriginal = !showingOriginal
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        imageEnhancer.release()
         originalBitmap?.recycle()
         enhancedBitmap?.recycle()
     }

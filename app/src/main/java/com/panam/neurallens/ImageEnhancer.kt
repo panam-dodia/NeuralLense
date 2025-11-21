@@ -13,22 +13,24 @@ import java.nio.FloatBuffer
 import kotlin.math.min
 
 enum class EnhancementMode {
-    LOW_LIGHT,      // Zero-DCE
-    SHARPEN,        // OpenCV sharpening
-    DEBLUR,         // Simple deblur (Unsharp Mask)
-    BOTH            // Low-light + Sharpen
+    LOW_LIGHT,      // Zero-DCE (local)
+    SHARPEN,        // OpenCV sharpening (local)
+    DEBLUR,         // DACLIP via Replicate (cloud)
+    BOTH            // Low-light + Sharpen (local)
 }
 
 class ImageEnhancer(context: Context) {
     private val zeroDCESession: OrtSession
-    private val deblurProcessor: DeblurProcessor
+    private val replicateClient: ReplicateClient
     private val env = OrtEnvironment.getEnvironment()
+
+    // Progress callback for async operations
+    var onProgress: ((Float, String) -> Unit)? = null
 
     companion object {
         private const val TAG = "ImageEnhancer"
 
         init {
-            // Initialize OpenCV
             if (!OpenCVLoader.initDebug()) {
                 Log.e(TAG, "OpenCV initialization failed")
             } else {
@@ -41,25 +43,65 @@ class ImageEnhancer(context: Context) {
         Log.d(TAG, "Loading Zero-DCE model...")
         val zeroDCEBytes = context.assets.open("zero_dce.onnx").readBytes()
         zeroDCESession = env.createSession(zeroDCEBytes)
-        Log.d(TAG, "Zero-DCE loaded! Input: ${zeroDCESession.inputNames.first()}")
+        Log.d(TAG, "Zero-DCE loaded!")
 
-        deblurProcessor = DeblurProcessor(context)
+        // Initialize Replicate client for cloud deblurring using BuildConfig
+        replicateClient = ReplicateClient(BuildConfig.REPLICATE_API_TOKEN)
+        Log.d(TAG, "Replicate client initialized")
     }
 
+    /**
+     * Enhance image based on selected mode.
+     * Note: DEBLUR mode requires network and runs asynchronously.
+     */
     fun enhance(bitmap: Bitmap, mode: EnhancementMode = EnhancementMode.BOTH): Bitmap {
         Log.d(TAG, "Enhancement mode: $mode")
 
         return when(mode) {
             EnhancementMode.LOW_LIGHT -> enhanceLowLight(bitmap)
             EnhancementMode.SHARPEN -> sharpenImage(bitmap)
-            EnhancementMode.DEBLUR -> deblurProcessor.deblur(bitmap) ?: bitmap
+            EnhancementMode.DEBLUR -> {
+                // This should not be called directly - use deblurAsync instead
+                Log.w(TAG, "DEBLUR mode called synchronously - returning original")
+                bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, true)
+            }
             EnhancementMode.BOTH -> {
-                // First enhance low-light, then sharpen
                 val enhanced = enhanceLowLight(bitmap)
                 val sharpened = sharpenImage(enhanced)
                 enhanced.recycle()
                 sharpened
             }
+        }
+    }
+
+    /**
+     * Deblur image using DACLIP via Replicate cloud API.
+     * This is a suspend function - must be called from a coroutine.
+     *
+     * @param bitmap Input blurry image
+     * @param maxSize Max dimension (smaller = faster, default 512)
+     * @param onProgress Progress callback (0.0 to 1.0, status message)
+     * @return Deblurred bitmap
+     */
+    suspend fun deblurAsync(
+        bitmap: Bitmap,
+        maxSize: Int = 512,
+        onProgress: ((Float, String) -> Unit)? = null
+    ): Bitmap {
+        Log.d(TAG, "Starting cloud deblur via Replicate...")
+
+        return try {
+            replicateClient.restoreImage(
+                bitmap = bitmap,
+                maxSize = maxSize,
+                onProgress = onProgress
+            )
+        } catch (e: ReplicateException) {
+            Log.e(TAG, "Replicate error: ${e.message}")
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Deblur failed: ${e.message}")
+            throw e
         }
     }
 
@@ -73,12 +115,10 @@ class ImageEnhancer(context: Context) {
 
         val resized = Bitmap.createScaledBitmap(bitmap, width, height, true)
 
-        // Convert to float array [1, 3, H, W], normalized to [0, 1]
         val floatArray = FloatArray(1 * 3 * height * width)
         val pixels = IntArray(width * height)
         resized.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        // Convert to CHW format (RGB order)
         for (i in pixels.indices) {
             val pixel = pixels[i]
             val r = ((pixel shr 16) and 0xFF) / 255f
@@ -92,7 +132,6 @@ class ImageEnhancer(context: Context) {
 
         Log.d(TAG, "Running Zero-DCE inference on ${width}x${height}...")
 
-        // Run inference
         val inputTensor = OnnxTensor.createTensor(
             env,
             FloatBuffer.wrap(floatArray),
@@ -102,7 +141,6 @@ class ImageEnhancer(context: Context) {
         val results = zeroDCESession.run(mapOf("image" to inputTensor))
         val outputTensor = results[0].value as Array<Array<Array<FloatArray>>>
 
-        // Convert back to bitmap
         val enhanced = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val outputPixels = IntArray(width * height)
 
@@ -119,11 +157,11 @@ class ImageEnhancer(context: Context) {
 
         enhanced.setPixels(outputPixels, 0, width, 0, 0, width, height)
 
-        // Scale back to original size
         val result = Bitmap.createScaledBitmap(enhanced, bitmap.width, bitmap.height, true)
 
         enhanced.recycle()
         resized.recycle()
+        inputTensor.close()
 
         val duration = System.currentTimeMillis() - startTime
         Log.d(TAG, "Zero-DCE completed in ${duration}ms")
@@ -135,11 +173,9 @@ class ImageEnhancer(context: Context) {
         val startTime = System.currentTimeMillis()
 
         try {
-            // Convert Bitmap to OpenCV Mat
             val mat = Mat()
             Utils.bitmapToMat(bitmap, mat)
 
-            // Create sharpening kernel
             val kernel = Mat(3, 3, CvType.CV_32F)
             kernel.put(0, 0,
                 0.0, -1.0, 0.0,
@@ -147,15 +183,12 @@ class ImageEnhancer(context: Context) {
                 0.0, -1.0, 0.0
             )
 
-            // Apply sharpening filter
             val sharpened = Mat()
             Imgproc.filter2D(mat, sharpened, -1, kernel)
 
-            // Convert back to Bitmap
             val result = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
             Utils.matToBitmap(sharpened, result)
 
-            // Clean up
             mat.release()
             sharpened.release()
             kernel.release()
@@ -167,13 +200,11 @@ class ImageEnhancer(context: Context) {
 
         } catch (e: Exception) {
             Log.e(TAG, "Sharpening failed: ${e.message}")
-            // Return original bitmap if sharpening fails
             return bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, true)
         }
     }
 
     fun release() {
         zeroDCESession.close()
-        deblurProcessor.release()
     }
 }
