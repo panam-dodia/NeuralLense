@@ -35,7 +35,6 @@ class ReplicateClient(private val apiToken: String) {
 
         // DACLIP model - correct version ID
         private const val DACLIP_VERSION = "5efbc85e1d0771704d74d81a660041abd270d48e99572badefbcdf81383f6af4"
-
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
     }
 
@@ -94,7 +93,6 @@ class ReplicateClient(private val apiToken: String) {
 
         result
     }
-
     private fun resizeIfNeeded(bitmap: Bitmap, maxSize: Int): Bitmap {
         val maxDim = maxOf(bitmap.width, bitmap.height)
         return if (maxDim > maxSize) {
@@ -102,7 +100,11 @@ class ReplicateClient(private val apiToken: String) {
             val newWidth = (bitmap.width * scale).toInt()
             val newHeight = (bitmap.height * scale).toInt()
             Log.d(TAG, "Resizing from ${bitmap.width}x${bitmap.height} to ${newWidth}x${newHeight}")
-            Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+
+            // Use higher quality scaling
+            val matrix = android.graphics.Matrix()
+            matrix.setScale(scale, scale)
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         } else {
             bitmap
         }

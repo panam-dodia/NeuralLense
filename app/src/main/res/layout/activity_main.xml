@@ -121,17 +121,21 @@
 
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btnEnhance"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginBottom="8dp"
-        android:text="✨ Enhance with AI"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textColor="#FFFFFF"
-        android:backgroundTint="#6C63FF"
-        android:enabled="false"/>
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="4dp">
+
+        <Button
+            android:id="@+id/btnDAClip"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="DACLIP\n(Blur/Haze)"
+            android:textSize="12sp"
+            android:enabled="false"/>
+    </LinearLayout>
 
     <Button
         android:id="@+id/btnCompare"

@@ -111,7 +111,6 @@ class MainActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         btnCamera = findViewById(R.id.btnCamera)
         btnGallery = findViewById(R.id.btnGallery)
-        btnEnhance = findViewById(R.id.btnEnhance)
         btnCompare = findViewById(R.id.btnCompare)
 
         photoFile = File(cacheDir, "photo.jpg")
