@@ -1,5 +1,6 @@
 package com.panam.neurallens
 
+import android.media.ExifInterface
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -20,11 +21,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+private var daclipOnDevice: DACLIPOnDevice? = null
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var replicateClient: ReplicateClient
 
+    private lateinit var btnDAClip: Button
     // Views
     private lateinit var imageView: ImageView
     private lateinit var tvLabel: TextView
@@ -33,7 +36,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var btnCamera: Button
     private lateinit var btnGallery: Button
-    private lateinit var btnEnhance: Button
     private lateinit var btnCompare: Button
 
     // State
@@ -49,10 +51,12 @@ class MainActivity : AppCompatActivity() {
 
     private val takePicture = registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
-            originalBitmap?.recycle()
-            originalBitmap = decodeSampledBitmapFromFile(photoFile.absolutePath)
+            var bitmap = decodeSampledBitmapFromFile(photoFile.absolutePath)
+            bitmap = getRotatedBitmap(bitmap, photoFile.absolutePath)
+            originalBitmap?.recycle()  // Recycle OLD bitmap first
+            originalBitmap = bitmap    // Then set the new rotated one
             imageView.setImageBitmap(originalBitmap)
-            btnEnhance.isEnabled = true
+            btnDAClip.isEnabled = true
             btnCompare.isEnabled = false
             enhancedBitmap?.recycle()
             enhancedBitmap = null
@@ -72,7 +76,7 @@ class MainActivity : AppCompatActivity() {
                     originalBitmap?.recycle()
                     originalBitmap = resizeBitmapIfNeeded(loadedBitmap)
                     imageView.setImageBitmap(originalBitmap)
-                    btnEnhance.isEnabled = true
+                    btnDAClip.isEnabled = true
                     btnCompare.isEnabled = false
                     enhancedBitmap?.recycle()
                     enhancedBitmap = null
@@ -111,9 +115,17 @@ class MainActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progressBar)
         btnCamera = findViewById(R.id.btnCamera)
         btnGallery = findViewById(R.id.btnGallery)
+        btnCamera = findViewById(R.id.btnCamera)
+        btnGallery = findViewById(R.id.btnGallery)
         btnCompare = findViewById(R.id.btnCompare)
+        btnDAClip = findViewById(R.id.btnDAClip)
 
-        photoFile = File(cacheDir, "photo.jpg")
+// Now you can use them
+        btnDAClip.isEnabled = false
+        btnCompare.isEnabled = false
+        btnDAClip = findViewById(R.id.btnDAClip)
+
+        photoFile = File(cacheDir, "photo.png")
 
         // Hide progress initially
         progressBar.visibility = View.GONE
@@ -128,12 +140,24 @@ class MainActivity : AppCompatActivity() {
             pickImage.launch("image/*")
         }
 
-        btnEnhance.setOnClickListener {
-            enhanceImage()
+        btnDAClip.setOnClickListener {
+            enhanceWithDAClip()
         }
 
         btnCompare.setOnClickListener {
             toggleComparison()
+        }
+        lifecycleScope.launch(Dispatchers.IO) {
+            daclipOnDevice = DACLIPOnDevice(this@MainActivity)
+            val success = daclipOnDevice?.initialize()
+
+            withContext(Dispatchers.Main) {
+                if (success == true) {
+                    Toast.makeText(this@MainActivity, "✓ On-device AI ready!", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "⚠️ Models failed to load", Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -160,7 +184,6 @@ class MainActivity : AppCompatActivity() {
             this.inSampleSize = inSampleSize
         }.let { BitmapFactory.decodeFile(path, it) }
     }
-
     private fun resizeBitmapIfNeeded(bitmap: Bitmap): Bitmap {
         val maxDim = MAX_IMAGE_DIMENSION
         return if (bitmap.width > maxDim || bitmap.height > maxDim) {
@@ -194,7 +217,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Enhance image using DACLIP via Replicate cloud
      */
-    private fun enhanceImage() {
+    private fun enhanceWithDAClip() {
         val bitmap = originalBitmap ?: return
 
         setProcessingState(true, "Connecting to AI server...")
@@ -204,7 +227,7 @@ class MainActivity : AppCompatActivity() {
                 val enhanced = withContext(Dispatchers.IO) {
                     replicateClient.restoreImage(
                         bitmap = bitmap,
-                        maxSize = 512,
+                        maxSize = 1024,
                         onProgress = { progress, status ->
                             runOnUiThread {
                                 progressBar.progress = (progress * 100).toInt()
@@ -247,7 +270,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setProcessingState(isProcessing: Boolean, message: String = "") {
         runOnUiThread {
-            btnEnhance.isEnabled = !isProcessing
+            btnDAClip.isEnabled = !isProcessing
             btnCamera.isEnabled = !isProcessing
             btnGallery.isEnabled = !isProcessing
 
@@ -256,15 +279,35 @@ class MainActivity : AppCompatActivity() {
                 tvProgress.visibility = View.VISIBLE
                 progressBar.progress = 0
                 tvProgress.text = message
-                btnEnhance.text = "Processing..."
             } else {
                 progressBar.visibility = View.GONE
                 tvProgress.visibility = View.GONE
-                btnEnhance.text = "✨ Enhance with AI"
             }
         }
     }
 
+    private fun getRotatedBitmap(bitmap: Bitmap, path: String): Bitmap {
+        val exif = ExifInterface(path)
+        val orientation = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+
+        val matrix = android.graphics.Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.preScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.preScale(1f, -1f)
+        }
+
+        return if (orientation != ExifInterface.ORIENTATION_NORMAL) {
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        } else {
+            bitmap
+        }
+    }
     private fun toggleComparison() {
         if (showingOriginal) {
             imageView.setImageBitmap(enhancedBitmap)
